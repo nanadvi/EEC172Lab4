@@ -57,6 +57,15 @@ int interruptCounter;
 
 unsigned long timeInterval[18] = {};
 unsigned long timeOfInterrupt[18] = {};
+unsigned int bitSequence[18] = {};
+int buttons[12][18] = {
+                       {},
+                       {},
+                       {},
+                       {},
+                       {},
+
+};
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- End
 //*****************************************************************************
@@ -84,11 +93,26 @@ static void GPIOA2IntHandler(void) {
     MAP_GPIOIntClear(gpioin.port, ulStatus);		// clear interrupts on GPIOA2
     time = TimerValueGet(TIMERA0_BASE, TIMER_A);
     // Report("Interrupt: %d, Time of Interrupt: %d\n\r", interruptCounter, time);
+
     if(interruptCounter <= 18)
     {
         timeOfInterrupt[interruptCounter] = time;
-        timeInterval[interruptCounter] = time - timeOfInterrupt[interruptCounter-1];
+        // Report("%lu\n\r", timeOfInterrupt[interruptCounter-1]);
+        unsigned long read = time - timeOfInterrupt[interruptCounter-1];
+        timeInterval[interruptCounter] = read;
+        // Get the bit sequence
+        if(read > 30000 && read< 55000){
+            bitSequence[interruptCounter] = 0;
+        }
+        else if(read > 55000 && read< 80000){
+            bitSequence[interruptCounter] = 1;
+        }
+        else {
+            // Start of new burst
+            bitSequence[interruptCounter] = 0;
+        }
     }
+
 }
 //*****************************************************************************
 //
@@ -119,21 +143,31 @@ GPIOIntInit(){
 initializeArr()
 {
     int i;
-    for(i = 0; i <= 18; i++)
+    for(i = 0; i < 18; i++)
     {
         timeInterval[i] = 0;
         timeOfInterrupt[i] = 0;
+        bitSequence[i] = 0;
     }
 }
 
 printArr()
 {
     int i;
-    for(i = 0; i <= 18; i++)
+    for(i = 0; i < 18; i++)
     {
-        Report("Time interval : %d, Interrupt: %d\n\r", timeInterval[i], i);
+        Report("Time interval : %lu, Interrupt: %d\n\r", (int) timeInterval[i], i);
         // Report("Time of Interrupt: %d, Interrupt: %d\n\r", timeOfInterrupt[i], i);
+        // Report("%d", bitSequence[i]);
     }
+    Report("\n\r");
+    for(i = 0; i < 18; i++)
+    {
+        // Report("Time interval : %d, Interrupt: %d\n\r", timeInterval[i], i);
+        // Report("Time of Interrupt: %d, Interrupt: %d\n\r", timeOfInterrupt[i], i);
+        Report("%d", bitSequence[i]);
+    }
+    Report("\n\r");
 }
 
 //****************************************************************************
@@ -178,7 +212,7 @@ int main() {
     //
     // Configure rising edge interrupts on SW2 and SW3
     //
-    MAP_GPIOIntTypeSet(gpioin.port, gpioin.pin, GPIO_RISING_EDGE);	// pin 61
+    MAP_GPIOIntTypeSet(gpioin.port, gpioin.pin, GPIO_FALLING_EDGE);	// pin 61
 
     ulStatus = MAP_GPIOIntStatus (gpioin.port, false);
     MAP_GPIOIntClear(gpioin.port, ulStatus);			// clear interrupts on GPIOA2
@@ -206,10 +240,12 @@ int main() {
         // We read 64 time intervals
         if(interruptCounter == 18)
         {
-            Report("\nTime intervals for RISING_EDGE\n\r");
+            Report("\n Time intervals for RISING_EDGE\n\r");
             printArr();
             interruptCounter = 0;
             initializeArr();
+            TimerValueSet(TIMERA0_BASE, TIMER_A, 0);
+
         }
     }
 }
