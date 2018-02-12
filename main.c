@@ -51,7 +51,7 @@ extern void (* const g_pfnVectors[])(void);
 volatile unsigned long time;
 int interruptCounter;
 int pulseCounter;
-char prevRead, currRead, *buffer;
+char prevRead, currRead, buffer[64];
 unsigned long _time;
 unsigned long _readTime;
 unsigned long timeInterval[35] = {};
@@ -101,6 +101,7 @@ TimerRefIntHandler(void)
     ulInts = TimerIntStatus(TIMERA0_BASE, true);
     TimerIntClear(TIMERA0_BASE, ulInts);
     _time++;
+    _readTime++;
 }
 
 void
@@ -212,14 +213,6 @@ static void timerInit()
     TimerEnable(TIMERA0_BASE, TIMER_A);
 }
 
-static void readTimeInit()
-{
-    Timer_IF_Init(PRCM_TIMERA0, TIMERA0_BASE, TIMER_CFG_PERIODIC, TIMER_B, 255);
-    Timer_IF_IntSetup(TIMERA0_BASE, TIMER_B, ReadTimeIntHandler);
-    TimerLoadSet(TIMERA0_BASE, TIMER_B, 1);
-    TimerEnable(TIMERA0_BASE, TIMER_B);
-}
-
 initializeArr()
 {
     int i;
@@ -252,7 +245,7 @@ printArr() {
 static void printBuffer()
 {
     int i;
-    Report("\n\r");
+//    Report("%d\n\r", readIndex);
     for(i = 0; i < readIndex; i++)
     {
         Report("%c", buffer[i]);
@@ -286,6 +279,7 @@ static int decode(unsigned long time){
 //
 //****************************************************************************
 
+
 int main() {
     unsigned long ulStatus;
     BoardInit();
@@ -305,7 +299,6 @@ int main() {
     // Initialize Timer
     //
     timerInit();
-    readTimeInit();
     //
     // Register the interrupt handlers
     //
@@ -322,10 +315,8 @@ int main() {
     pulseCounter = 0;
     initializeArr();
     _time = 0;
-    _readTime = 0;
     readIndex = 0;
-    buffer = (char *) malloc(sizeof(char) * (64*64));
-    // Initialize local  variables
+    memset(buffer, ' ', 64);
     int fPressed = 0;
 
     MAP_GPIOIntEnable(gpioin.port, gpioin.pin);
@@ -337,7 +328,8 @@ int main() {
 
     // setting timer value to 0
     TimerValueSet(TIMERA0_BASE, TIMER_A, 0);
-    TimerValueSet(TIMERA1_BASE, TIMER_B, 0);
+
+    int deleteFlag = 0;
 
     while (1) {
         // logic for matching the pattern and displaying character on OLED
@@ -354,42 +346,182 @@ int main() {
             // TimerLoadSet(TIMERA0_BASE, TIMER_A, 10000);
             // printArr();
             currRead =  compareBitPatterns();
-            // buffer[readIndex] = currRead;
-            readIndex++;
-            Report("%d\n\r",_readTime);
-            Report("%c\n\r", currRead);
-            Report("%d\n\r",_readTime);
+//            buffer[readIndex] = currRead;
+            // Report("%d\n\r",_readTime);
+//             Report("%c\n\r", currRead);
+            // Report("%d\n\r",_readTime);
+
             if(currRead == 'M')
             {
+                Report("\n\r");
                 printBuffer();
+                memset(buffer, ' ', 64);
+                readIndex = 0;
                 // Send message to the other board
             }
-            else if(currRead == 'F' || currRead == 'D' && fPressed == 0)
-            {
-                // Pressing the delete button
-                buffer[readIndex] = buffer[readIndex-1];
-                readIndex --;
+            else if (currRead == 'F' && _readTime > 2000) {
+                ;
             }
-            else if(currRead == '2')
-            {
-                switch(fPressed)
-                {
-                case 0:
+            else if (currRead != 'F' && _readTime > 2000) {
+                switch(currRead) {
+                case '2':
                     buffer[readIndex] = 'a';
-                    fPressed++;
                     break;
-                case 1:
-                    buffer[readIndex] = 'b';
-                    fPressed++;
+
+                case '3':
+                    buffer[readIndex] = 'd';
                     break;
-                case 2:
-                    buffer[readIndex] = 'c';
-                    fPressed = 0;
+
+                case '4':
+                    buffer[readIndex] = 'g';
+                    break;
+
+                case '5':
+                    buffer[readIndex] = 'j';
+                    break;
+
+                case '6':
+                    buffer[readIndex] = 'm';
+                    break;
+
+                case '7':
+                    buffer[readIndex] = 'p';
+                    break;
+
+                case '8':
+                    buffer[readIndex] = 't';
+                    break;
+
+                case '9':
+                    buffer[readIndex] = 'w';
+                    break;
+
+                case '0':
+                    buffer[readIndex] = ' ';
+                    break;
+                case 'D':
+                    deleteFlag = 1;
                     break;
                 }
+                if (deleteFlag == 0)
+                    readIndex++;
             }
+            else if (currRead == 'F' && _readTime < 2700) {
+                char output = ' ';
+                switch(buffer[readIndex-1]) {
+                case 'a':
+                    output = 'b';
+                    break;
+
+                case 'b':
+                    output = 'c';
+                    break;
+
+                case 'c':
+                    output = 'a';
+                    break;
+
+                case 'd':
+                    output = 'e';
+                    break;
+
+                case 'e':
+                    output = 'f';
+                    break;
+
+                case 'f':
+                    output = 'd';
+                    break;
+
+                case 'g':
+                    output = 'h';
+                    break;
+
+                case 'h':
+                    output = 'i';
+                    break;
+
+                case 'i':
+                    output = 'g';
+                    break;
+
+                case 'j':
+                    output = 'k';
+                    break;
+
+                case 'k':
+                    output = 'l';
+                    break;
+
+                case 'l':
+                    output = 'j';
+                    break;
+
+                case 'm':
+                    output = 'n';
+                    break;
+
+                case 'n':
+                    output = 'o';
+                    break;
+
+                case 'o':
+                    output = 'm';
+                    break;
+
+                case 'p':
+                    output = 'q';
+                    break;
+
+                case 'q':
+                    output = 'r';
+                    break;
+
+                case 'r':
+                    output = 's';
+                    break;
+
+                case 's':
+                    output = 'p';
+                    break;
+
+                case 't':
+                    output = 'u';
+                    break;
+
+                case 'u':
+                    output = 'v';
+                    break;
+
+                case 'w':
+                    output = 'x';
+                    break;
+
+                case 'x':
+                    output = 'y';
+                    break;
+
+                case 'y':
+                    output = 'z';
+                    break;
+
+                case 'z':
+                    output = 'w';
+                    break;
+                }
+                buffer[readIndex-1] = output;
+            }
+            if(currRead == 'D' || deleteFlag == 1)
+            {
+                // Pressing the delete button
+                deleteFlag = 0;
+                buffer[readIndex] = ' ';
+                readIndex--;
+
+            }
+            Report("%c", buffer[readIndex-1]);
             // Report("%c\n\r", compareBitPatterns());
-            // _readTime = 0;
+             _readTime = 0;
 
             interruptCounter = 0;
             initializeArr();
