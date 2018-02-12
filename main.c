@@ -51,11 +51,13 @@ extern void (* const g_pfnVectors[])(void);
 volatile unsigned long time;
 int interruptCounter;
 int pulseCounter;
-
+char prevRead, currRead, *buffer;
 unsigned long _time;
+unsigned long _readTime;
 unsigned long timeInterval[35] = {};
 unsigned long timeOfInterrupt[35] = {};
 unsigned int bitSequence[35] = {};
+int readIndex;
 int buttons[12][35] = {
                        {0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,1,1,0,0,0,0,0,1,0,0,1,1,1,1,0}, // 0
                        {0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0}, // 1
@@ -69,7 +71,6 @@ int buttons[12][35] = {
                        {0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,0,1,0,1,0,0,0,0,1,0,1,0,1,1,1,1,0}, // 9
                        {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // DELETE
                        {0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,0} // MUTE
-
 };
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- End
@@ -102,6 +103,18 @@ TimerRefIntHandler(void)
     _time++;
 }
 
+void
+ReadTimeIntHandler(void)
+{
+    //
+    // Clear the timer interrupt.
+    //
+    unsigned long ulInts;
+    ulInts = TimerIntStatus(TIMERA0_BASE, true);
+    TimerIntClear(TIMERA0_BASE, ulInts);
+    _readTime++;
+}
+
 int compareTwoSequence(int sequence1[35], int sequence2[35]) {
     int i;
     for (i = 0; i < 35; i++) {
@@ -127,7 +140,6 @@ char compareBitPatterns() {
     return 'F';
 }
 
-
 static void GPIOA2IntHandler(void)
 {
     unsigned long ulStatus;
@@ -150,7 +162,7 @@ static void GPIOA2IntHandler(void)
         // Report("%d \n\r", _time);
         // GPIOIntDisable(gpioin.port, gpioin.pin);
         // Don't tick till we read and decode the bits
-        // TimerDisable(TIMERA0_BASE, TIMER_A);
+        TimerDisable(TIMERA0_BASE, TIMER_A);
         // Stop taking ticks too
         // printArr();
         // interruptCounter = 0;
@@ -158,7 +170,6 @@ static void GPIOA2IntHandler(void)
         // GPIOIntEnable(gpioin.port, gpioin.pin);
     }
 }
-
 
 //static void GPIOA2IntHandler(void) {
 //    unsigned long ulStatus;
@@ -180,6 +191,7 @@ static void GPIOA2IntHandler(void)
 //! \return None
 //
 //*****************************************************************************
+
 static void
 BoardInit(void) {
     MAP_IntVTableBaseSet((unsigned long)&g_pfnVectors[0]);
@@ -200,6 +212,14 @@ static void timerInit()
     TimerEnable(TIMERA0_BASE, TIMER_A);
 }
 
+static void readTimeInit()
+{
+    Timer_IF_Init(PRCM_TIMERA0, TIMERA0_BASE, TIMER_CFG_PERIODIC, TIMER_B, 255);
+    Timer_IF_IntSetup(TIMERA0_BASE, TIMER_B, ReadTimeIntHandler);
+    TimerLoadSet(TIMERA0_BASE, TIMER_B, 1);
+    TimerEnable(TIMERA0_BASE, TIMER_B);
+}
+
 initializeArr()
 {
     int i;
@@ -211,13 +231,7 @@ initializeArr()
     }
 }
 
-printArr()
-{
-//    unsigned int time[35] = {};
-//    unsigned int bits[35] = {};
-//    memcpy(time, timeOfInterrupt, 35);
-//    memcpy(bits, bitSequence, 35);
-
+printArr() {
     int i;
     for(i = 0; i < 35; i++)
     {
@@ -231,6 +245,17 @@ printArr()
         // Report("Time interval : %d, Interrupt: %d\n\r", timeInterval[i], i);
         // Report("Time of Interrupt: %d, Interrupt: %d\n\r", timeOfInterrupt[i], i);
         Report("%d", bitSequence[i]);
+    }
+    Report("\n\r");
+}
+
+static void printBuffer()
+{
+    int i;
+    Report("\n\r");
+    for(i = 0; i < readIndex; i++)
+    {
+        Report("%c", buffer[i]);
     }
     Report("\n\r");
 }
@@ -249,25 +274,8 @@ static int decode(unsigned long time){
     }
     return 0;
 }
-//void decode(){
-//    int i;
-//    for(i = 0; i < 35; i++)
-//    {
-//        time = timeOfInterrupt[i];
-//        if(time > 0 && time < 10){
-//            bitSequence[i] = 0;
-//        }
-//        else if(time > 10 && time < 20){
-//            bitSequence[i] = 1;
-//        }
-//        else {
-//            // Start of new burst
-//            bitSequence[i] = 0;
-//        }
-//    }
-//}
 
-//****************************************************************************
+//***************************************************************************
 //
 //! Main function
 //!
@@ -277,6 +285,7 @@ static int decode(unsigned long time){
 //! \return None.
 //
 //****************************************************************************
+
 int main() {
     unsigned long ulStatus;
     BoardInit();
@@ -292,14 +301,11 @@ int main() {
     InitTerm();
 
     ClearTerm();
-
-    // Configuring the timer
-
     //
     // Initialize Timer
     //
-     timerInit();
-
+    timerInit();
+    readTimeInit();
     //
     // Register the interrupt handlers
     //
@@ -308,7 +314,6 @@ int main() {
     // Configure rising edge interrupts on PIN 61
     //
     MAP_GPIOIntTypeSet(gpioin.port, gpioin.pin, GPIO_RISING_EDGE);
-
     ulStatus = MAP_GPIOIntStatus (gpioin.port, false);
     MAP_GPIOIntClear(gpioin.port, ulStatus);            // clear interrupts on GPIOA2
 
@@ -317,9 +322,13 @@ int main() {
     pulseCounter = 0;
     initializeArr();
     _time = 0;
+    _readTime = 0;
+    readIndex = 0;
+    buffer = (char *) malloc(sizeof(char) * (64*64));
+    // Initialize local  variables
+    int fPressed = 0;
 
     MAP_GPIOIntEnable(gpioin.port, gpioin.pin);
-
 
     Message("\t\t****************************************************\n\r");
     Message("\t\t\                      LAB 3                        \n\r");
@@ -327,7 +336,8 @@ int main() {
     Message("\n\n\n\r");
 
     // setting timer value to 0
-    // TimerValueSet(TIMERA0_BASE, TIMER_A, 0);
+    TimerValueSet(TIMERA0_BASE, TIMER_A, 0);
+    TimerValueSet(TIMERA1_BASE, TIMER_B, 0);
 
     while (1) {
         // logic for matching the pattern and displaying character on OLED
@@ -342,14 +352,50 @@ int main() {
             // Report("%d \n\r", _time);
             // _time = 0;
             // TimerLoadSet(TIMERA0_BASE, TIMER_A, 10000);
-//            printArr();
-
-            Report("%c\n\r", compareBitPatterns());
+            // printArr();
+            currRead =  compareBitPatterns();
+            // buffer[readIndex] = currRead;
+            readIndex++;
+            Report("%d\n\r",_readTime);
+            Report("%c\n\r", currRead);
+            Report("%d\n\r",_readTime);
+            if(currRead == 'M')
+            {
+                printBuffer();
+                // Send message to the other board
+            }
+            else if(currRead == 'F' || currRead == 'D' && fPressed == 0)
+            {
+                // Pressing the delete button
+                buffer[readIndex] = buffer[readIndex-1];
+                readIndex --;
+            }
+            else if(currRead == '2')
+            {
+                switch(fPressed)
+                {
+                case 0:
+                    buffer[readIndex] = 'a';
+                    fPressed++;
+                    break;
+                case 1:
+                    buffer[readIndex] = 'b';
+                    fPressed++;
+                    break;
+                case 2:
+                    buffer[readIndex] = 'c';
+                    fPressed = 0;
+                    break;
+                }
+            }
+            // Report("%c\n\r", compareBitPatterns());
+            // _readTime = 0;
 
             interruptCounter = 0;
             initializeArr();
             MAP_GPIOIntEnable(gpioin.port, gpioin.pin);
-            // TimerEnable(TIMERA0_BASE, TIMER_A);
+            // TimerLoadSet(TIMERA0_BASE, TIMER_A, 10000);
+            TimerEnable(TIMERA0_BASE, TIMER_A);
         }
     }
 }
