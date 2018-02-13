@@ -72,6 +72,7 @@ unsigned long _readTime;
 unsigned long timeInterval[35] = {};
 unsigned long timeOfInterrupt[35] = {};
 unsigned int bitSequence[35] = {};
+int receiverLineNumber;
 int readIndex;
 int buttons[12][35] = {
                        {0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,1,1,0,0,0,0,0,1,0,0,1,1,1,1,0}, // 0
@@ -274,6 +275,7 @@ void sendMessage(char message[64]) {
 }
 
 void receiveMessage() {
+    Report("H\n\r");
     int i;
     unsigned long ulStatus;
     ulStatus = MAP_UARTIntStatus(UARTA1_BASE, true);
@@ -281,13 +283,16 @@ void receiveMessage() {
 
     MAP_UtilsDelay(80000);
 
-    for (i=0; i<64; i++) {
+    for (i=0; i<8; i++) {
         receiverBuffer[i] = MAP_UARTCharGet(UARTA1_BASE);
         MAP_UtilsDelay(80000);
-
-        drawChar(6*i, 64, receiverBuffer[i], WHITE, BLACK, 0x01);
+        if (receiverBuffer[i] != ' ') {
+            drawChar(6*i, receiverLineNumber, receiverBuffer[i], WHITE, BLACK, 0x01);
+        }
         MAP_UtilsDelay(80000);
     }
+    receiverLineNumber += 10;
+    memset(receiverBuffer, ' ', 64);
 }
 
 void SPI_Init() {
@@ -351,7 +356,7 @@ void UARTInt_Init() {
 
     // Enable interrupt
 
-    MAP_UARTIntEnable(UARTA1_BASE, UART_INT_RX|UART_INT_RT);
+    MAP_UARTIntEnable(UARTA1_BASE, UART_INT_RX);
 
     UARTFIFOEnable(UARTA1_BASE);
 }
@@ -376,7 +381,7 @@ int main() {
     PinMuxConfig();
     
     // UART config
-//    UARTINT_Init();
+    UARTInt_Init();
 
     // SPI config
     SPI_Init();
@@ -407,7 +412,9 @@ int main() {
     initializeArr();
     _time = 0;
     readIndex = 0;
+    receiverLineNumber = 64;
     memset(buffer, ' ', 64);
+    memset(receiverBuffer, ' ', 64);
     int fPressed = 0;
 
     MAP_GPIOIntEnable(gpioin.port, gpioin.pin);
