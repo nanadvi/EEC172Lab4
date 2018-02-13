@@ -33,6 +33,8 @@
 #include "utils.h"
 #include "timer.h"
 #include "systick.h"
+#include "spi.h"
+#include "uart.h"
 #include <stdint.h>
 #include <inttypes.h>
 #include <string.h>
@@ -42,6 +44,17 @@
 #include "timer_if.h"
 #include "pin_mux_config.h"
 
+// Adafruit includes
+#include "Adafruit_GFX.h"
+#include "Adafruit_SSD1351.h"
+#include "glcdfont.h"
+
+// draw functions includes
+#include "test.h"
+
+
+#define SPI_IF_BIT_RATE  100000
+#define TR_BUFF_SIZE     100
 
 //*****************************************************************************
 //                 GLOBAL VARIABLES -- Start
@@ -51,7 +64,9 @@ extern void (* const g_pfnVectors[])(void);
 volatile unsigned long time;
 int interruptCounter;
 int pulseCounter;
-char prevRead, currRead, buffer[64];
+char prevRead, currRead;
+char buffer[64];
+char receiverBuffer[64];
 unsigned long _time;
 unsigned long _readTime;
 unsigned long timeInterval[35] = {};
@@ -91,8 +106,7 @@ static void BoardInit(void);
 //                      LOCAL FUNCTION DEFINITIONS                         
 //*****************************************************************************
 
-void
-TimerRefIntHandler(void)
+void TimerRefIntHandler(void)
 {
     //
     // Clear the timer interrupt.
@@ -104,17 +118,6 @@ TimerRefIntHandler(void)
     _readTime++;
 }
 
-void
-ReadTimeIntHandler(void)
-{
-    //
-    // Clear the timer interrupt.
-    //
-    unsigned long ulInts;
-    ulInts = TimerIntStatus(TIMERA0_BASE, true);
-    TimerIntClear(TIMERA0_BASE, ulInts);
-    _readTime++;
-}
 
 int compareTwoSequence(int sequence1[35], int sequence2[35]) {
     int i;
@@ -146,8 +149,6 @@ static void GPIOA2IntHandler(void)
     unsigned long ulStatus;
     ulStatus = MAP_GPIOIntStatus (gpioin.port, false);
     MAP_GPIOIntClear(gpioin.port, ulStatus);        // clear interrupts on GPIOA2
-    // time = TimerValueGet(TIMERA0_BASE, TIMER_A);
-    // TimerValueSet(TIMERA0_BASE, TIMER_A, 0);
     time = _time;
     _time = 0;
     int _interrupt = interruptCounter;
@@ -159,8 +160,6 @@ static void GPIOA2IntHandler(void)
     }
     if(interruptCounter == 35)
     {
-        // Report("H: %d\n\r", interruptCounter);
-        // Report("%d \n\r", _time);
         // GPIOIntDisable(gpioin.port, gpioin.pin);
         // Don't tick till we read and decode the bits
         TimerDisable(TIMERA0_BASE, TIMER_A);
@@ -171,18 +170,6 @@ static void GPIOA2IntHandler(void)
         // GPIOIntEnable(gpioin.port, gpioin.pin);
     }
 }
-
-//static void GPIOA2IntHandler(void) {
-//    unsigned long ulStatus;
-//    ulStatus = MAP_GPIOIntStatus (gpioin.port, true);
-//    MAP_GPIOIntClear(gpioin.port, ulStatus);        // clear interrupts on GPIOA2
-//    time = _time;
-//    _time = 0;
-//
-//    interruptCounter++;
-//    Report("%d, %d\n\r", interruptCounter, time);
-//
-//}
 //*****************************************************************************
 //
 //! Board Initialization & Configuration
@@ -205,7 +192,7 @@ BoardInit(void) {
     PRCMCC3200MCUInit();
 }
 
-static void timerInit()
+void timerInit()
 {
     Timer_IF_Init(PRCM_TIMERA0, TIMERA0_BASE, TIMER_CFG_PERIODIC, TIMER_A, 255);
     Timer_IF_IntSetup(TIMERA0_BASE, TIMER_A, TimerRefIntHandler);
@@ -213,7 +200,7 @@ static void timerInit()
     TimerEnable(TIMERA0_BASE, TIMER_A);
 }
 
-initializeArr()
+void initializeArr()
 {
     int i;
     for(i = 0; i < 35; i++)
@@ -224,7 +211,7 @@ initializeArr()
     }
 }
 
-printArr() {
+void printArr() {
     int i;
     for(i = 0; i < 35; i++)
     {
@@ -242,7 +229,7 @@ printArr() {
     Report("\n\r");
 }
 
-static void printBuffer()
+void printBuffer()
 {
     int i;
 //    Report("%d\n\r", readIndex);
@@ -251,6 +238,13 @@ static void printBuffer()
         Report("%c", buffer[i]);
     }
     Report("\n\r");
+
+    i = 0;
+    for(i = 0; i < 8; i++){
+
+        drawChar(6*i, 0, buffer[i], WHITE, BLACK, 0x01);
+
+    }
 }
 
 static int decode(unsigned long time){
@@ -268,6 +262,105 @@ static int decode(unsigned long time){
     return 0;
 }
 
+void sendMessage(char message[64]) {
+    // Disable UART Interrupt while sending characters
+    MAP_UARTIntDisable(UARTA1_BASE, UART_INT_RX | UART_INT_RT);
+    int i;
+    for (i=0; i<64; i++) {
+        // Sends the character in the buffer array to the UART register
+        MAP_UARTCharPut(UARTA1_BASE, message[i]);
+        // Creates a small delay to ensure that the hardware functions correctly
+        MAP_UtilsDelay(80000);
+
+    }
+    // Enables UART interrupts
+    MAP_UARTIntEnable(UARTA1_BASE, UART_INT_RX | UART_INT_RT);
+
+}
+
+void receiveMessage() {
+    int i;
+    unsigned long ulStatus;
+    ulStatus = MAP_UARTIntStatus(UARTA1_BASE, true);
+    UARTIntClear(UARTA1_BASE, ulStatus);
+
+    MAP_UtilsDelay(80000);
+
+    for (i=0; i<64; i++) {
+        receiverBuffer[i] = MAP_UARTCharGet(UARTA1_BASE);
+        MAP_UtilsDelay(80000);
+
+        drawChar(6*i, 64, receiverBuffer[i], WHITE, BLACK, 0x01);
+        MAP_UtilsDelay(80000);
+    }
+}
+
+void SPI_Init() {
+    // Reset SPI
+
+    MAP_SPIReset(GSPI_BASE);
+
+    //Enables the transmit and/or receive FIFOs.
+
+    //Base address is GSPI_BASE, SPI_TX_FIFO || SPI_RX_FIFO are the FIFOs to be enabled
+
+    MAP_SPIFIFOEnable(GSPI_BASE, SPI_TX_FIFO || SPI_RX_FIFO);
+
+
+
+    // Configure SPI interface
+
+    MAP_SPIConfigSetExpClk(GSPI_BASE,MAP_PRCMPeripheralClockGet(PRCM_GSPI),
+
+                     SPI_IF_BIT_RATE,SPI_MODE_MASTER,SPI_SUB_MODE_0,
+
+                     (SPI_SW_CTRL_CS |
+
+                     SPI_4PIN_MODE |
+
+                     SPI_TURBO_OFF |
+
+                     SPI_CS_ACTIVELOW |
+
+                     SPI_WL_8));
+
+
+
+    // Enable SPI for communication
+
+    MAP_SPIEnable(GSPI_BASE);
+}
+
+void UARTInt_Init() {
+    //configure Uart
+
+    MAP_UARTConfigSetExpClk(UARTA1_BASE, MAP_PRCMPeripheralClockGet(PRCM_UARTA1),
+
+                UART_BAUD_RATE, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
+
+                UART_CONFIG_PAR_NONE));
+
+    UARTEnable(UARTA1_BASE);
+
+    // Disable FIFO so RX interrupt triggers on any character
+
+    MAP_UARTFIFODisable(UARTA1_BASE);
+
+    // Set interrupt handlers
+
+    MAP_UARTIntRegister(UARTA1_BASE,receiveMessage);
+
+    // Clear any interrupts that may have been present
+
+    MAP_UARTIntClear(UARTA1_BASE, UART_INT_RX);
+
+    // Enable interrupt
+
+    MAP_UARTIntEnable(UARTA1_BASE, UART_INT_RX|UART_INT_RT);
+
+    UARTFIFOEnable(UARTA1_BASE);
+}
+
 //***************************************************************************
 //
 //! Main function
@@ -282,26 +375,29 @@ static int decode(unsigned long time){
 
 int main() {
     unsigned long ulStatus;
+
     BoardInit();
     
     PinMuxConfig();
     
     // UART config
+//    UARTINT_Init();
 
     // SPI config
+    SPI_Init();
 
     // Adafruit init
+    Adafruit_Init();
 
+    fillScreen(BLACK);
+
+    // Initializing the terminal
     InitTerm();
-
+    // Clearing the terminal
     ClearTerm();
-    //
     // Initialize Timer
-    //
     timerInit();
-    //
     // Register the interrupt handlers
-    //
     MAP_GPIOIntRegister(gpioin.port, GPIOA2IntHandler);
     //
     // Configure rising edge interrupts on PIN 61
@@ -323,7 +419,7 @@ int main() {
 
     Message("\t\t****************************************************\n\r");
     Message("\t\t\                      LAB 3                        \n\r");
-    Message("\t\t ***************************************************\n\r");
+    Message("\t\t****************************************************\n\r");
     Message("\n\n\n\r");
 
     // setting timer value to 0
@@ -520,8 +616,15 @@ int main() {
 
             }
             Report("%c", buffer[readIndex-1]);
-            // Report("%c\n\r", compareBitPatterns());
+            // replace above line with code to print to OLED
              _readTime = 0;
+
+//             int i = 0;
+//             for(i = 0; i < 64; i++){
+//
+//                 drawChar(6*i, 0, buffer[i], WHITE, BLACK, 0x01);
+//
+//             }
 
             interruptCounter = 0;
             initializeArr();
