@@ -236,15 +236,10 @@ void printBuffer()
     for(i = 0; i < readIndex; i++)
     {
         Report("%c", buffer[i]);
+        drawChar(6*i, 30, buffer[i], WHITE, BLACK, 0x01);
     }
     Report("\n\r");
 
-    i = 0;
-    for(i = 0; i < 8; i++){
-
-        drawChar(6*i, 0, buffer[i], WHITE, BLACK, 0x01);
-
-    }
 }
 
 static int decode(unsigned long time){
@@ -459,46 +454,50 @@ int main() {
                 ;
             }
             else if (currRead != 'F' && _readTime > 2000) {
+                char output = ' ';
                 switch(currRead) {
                 case '2':
-                    buffer[readIndex] = 'a';
+                    output = 'a';
                     break;
 
                 case '3':
-                    buffer[readIndex] = 'd';
+                    output = 'd';
                     break;
 
                 case '4':
-                    buffer[readIndex] = 'g';
+                    output = 'g';
                     break;
 
                 case '5':
-                    buffer[readIndex] = 'j';
+                    output = 'j';
                     break;
 
                 case '6':
-                    buffer[readIndex] = 'm';
+                    output = 'm';
                     break;
 
                 case '7':
-                    buffer[readIndex] = 'p';
+                    output = 'p';
                     break;
 
                 case '8':
-                    buffer[readIndex] = 't';
+                    output = 't';
                     break;
 
                 case '9':
-                    buffer[readIndex] = 'w';
+                    output = 'w';
                     break;
 
                 case '0':
-                    buffer[readIndex] = ' ';
+                    output = ' ';
                     break;
                 case 'D':
                     deleteFlag = 1;
                     break;
                 }
+                buffer[readIndex] = output;
+                Report("%c", buffer[readIndex]);
+                drawChar(6*readIndex, 0, buffer[readIndex], WHITE, BLACK, 0x01);
                 if (deleteFlag == 0)
                     readIndex++;
             }
@@ -606,16 +605,21 @@ int main() {
                     break;
                 }
                 buffer[readIndex-1] = output;
+                Report("%c", buffer[readIndex-1]);
+                drawChar(6*(readIndex-1), 0, buffer[readIndex-1], WHITE, BLACK, 0x01);
             }
-            if(currRead == 'D' || deleteFlag == 1)
+            if((currRead == 'D' || deleteFlag == 1) && readIndex > 0)
             {
                 // Pressing the delete button
-                deleteFlag = 0;
+                Report("D");
+                Report("%d", readIndex);
                 buffer[readIndex] = ' ';
                 readIndex--;
+                drawChar(6*readIndex, 0, ' ', WHITE, BLACK, 0x01);
+                deleteFlag = 0;
 
             }
-            Report("%c", buffer[readIndex-1]);
+
             // replace above line with code to print to OLED
              _readTime = 0;
 
