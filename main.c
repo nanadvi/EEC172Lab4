@@ -1,20 +1,3 @@
-
-//*****************************************************************************
-//
-// Application Name     - int_sw
-// Application Overview - The objective of this application is to demonstrate
-//                          GPIO interrupts using SW2 and SW3.
-//                          NOTE: the switches are not debounced!
-//
-//*****************************************************************************
-
-//****************************************************************************
-//
-//! \addtogroup int_sw
-//! @{
-//
-//****************************************************************************
-
 // Standard includes
 #include <stdio.h>
 
@@ -165,7 +148,6 @@ static void GPIOA2IntHandler(void)
         // Don't tick till we read and decode the bits
         TimerDisable(TIMERA0_BASE, TIMER_A);
         // Stop taking ticks too
-        // printArr();
         // interruptCounter = 0;
         // initializeArr();
         // GPIOIntEnable(gpioin.port, gpioin.pin);
@@ -212,28 +194,9 @@ void initializeArr()
     }
 }
 
-void printArr() {
-    int i;
-    for(i = 0; i < 35; i++)
-    {
-        // Report("Time interval : %lu, Interrupt: %d\n\r", (int) timeInterval[i], i);
-        Report("T: %d, I: %d\n\r", timeOfInterrupt[i], i);
-        // Report("%d", bitSequence[i]);
-    }
-    Report("\n\r");
-    for(i = 0; i < 35; i++)
-    {
-        // Report("Time interval : %d, Interrupt: %d\n\r", timeInterval[i], i);
-        // Report("Time of Interrupt: %d, Interrupt: %d\n\r", timeOfInterrupt[i], i);
-        Report("%d", bitSequence[i]);
-    }
-    Report("\n\r");
-}
-
 void printBuffer()
 {
     int i;
-//    Report("%d\n\r", readIndex);
     for(i = 0; i < readIndex; i++)
     {
         Report("%c", buffer[i]);
@@ -243,7 +206,7 @@ void printBuffer()
 
 }
 
-static int decode(unsigned long time){
+int decode(unsigned long time){
 
     if(time > 0 && time < 10){
         return 0;
@@ -435,19 +398,8 @@ int main() {
         if(interruptCounter == 35)
         {
             MAP_GPIOIntDisable(gpioin.port, gpioin.pin);
-            // TimerDisable(TIMERA0_BASE, TIMER_A);
-            // Report("M: %d\n\r", interruptCounter);
-            // Report("%d \n\r", _time);
-            // Report("\n Time intervals for RISING_EDGE\n\r");
-            // Report("%d \n\r", _time);
-            // _time = 0;
-            // TimerLoadSet(TIMERA0_BASE, TIMER_A, 10000);
-            // printArr();
+            
             currRead =  compareBitPatterns();
-//            buffer[readIndex] = currRead;
-            // Report("%d\n\r",_readTime);
-//             Report("%c\n\r", currRead);
-            // Report("%d\n\r",_readTime);
 
             if(currRead == 'M')
             {
@@ -630,25 +582,10 @@ int main() {
             // replace above line with code to print to OLED
              _readTime = 0;
 
-//             int i = 0;
-//             for(i = 0; i < 64; i++){
-//
-//                 drawChar(6*i, 0, buffer[i], WHITE, BLACK, 0x01);
-//
-//             }
-
             interruptCounter = 0;
             initializeArr();
             MAP_GPIOIntEnable(gpioin.port, gpioin.pin);
-            // TimerLoadSet(TIMERA0_BASE, TIMER_A, 10000);
             TimerEnable(TIMERA0_BASE, TIMER_A);
         }
     }
 }
-
-//*****************************************************************************
-//
-// Close the Doxygen group.
-//! @}
-//
-//*****************************************************************************
