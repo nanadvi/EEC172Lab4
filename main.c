@@ -65,8 +65,7 @@ char pressedButtons[64];
 char readBuffer[64];
 unsigned long _time;
 unsigned long _readTime;
-int receiverLineNumber;
-int readIndex, delFlag, charRead, sysTickFlag, goertzelsFlag, new_dig, bPressed,fPressed;
+int receiverLineNumber;readIndex, delFlag, charRead, sysTickFlag, goertzelsFlag, new_dig, bPressed,fPressed;
 int power_all[8];
 int coeff[8] = {31548, 31281, 30951, 30556, 29144, 28361, 27409, 26258}; // array to store the calculated coefficients
 int f_tone[8]={697, 770, 852, 941, 1209, 1336, 1477, 1633}; // frequencies of rows & columns
@@ -200,7 +199,6 @@ void sendMessage(char message[64]) {
 }
 
 void receiveMessage() {
-    Report("H\n\r");
     int i;
     unsigned long ulStatus;
     ulStatus = MAP_UARTIntStatus(UARTA1_BASE, true);
@@ -212,9 +210,9 @@ void receiveMessage() {
         receiverBuffer[i] = MAP_UARTCharGet(UARTA1_BASE);
         MAP_UtilsDelay(80000);
         Report("%c", receiverBuffer[i]);
-//        if (receiverBuffer[i] != ' ') {
-//            drawChar(6*i, receiverLineNumber, receiverBuffer[i], WHITE, BLACK, 0x01);
-//        }
+        if (receiverBuffer[i] != ' ') {
+            drawChar(6*i, receiverLineNumber, receiverBuffer[i], WHITE, BLACK, 0x01);
+        }
         MAP_UtilsDelay(80000);
     }
     receiverLineNumber += 10;
@@ -428,6 +426,7 @@ int main()
     bPressed = 0;
     goertzelsFlag = 0;
     fPressed = 0;
+    receiverLineNumber = 0;
     // Message array
     memset(readBuffer, ' ', 64);
     // Button press history
@@ -494,8 +493,6 @@ int main()
                 {
                     pressedButtons[bPressed] = buttonPressed;
                     bPressed++;
-
-
 
                     if(_readTime < 2500)
                     {
@@ -609,8 +606,6 @@ int main()
                         }
                         Report("%c", readBuffer[charRead-1]);
                         drawChar(6*charRead, 0, readBuffer[charRead-1], WHITE, BLACK, 0x01);
-                        // drawChar
-
                     }
                     else
                     {
@@ -672,6 +667,7 @@ int main()
                     if (deleteFlag == 1 && _readTime > 2500) {
                            readBuffer[charRead] = ' ';
                            charRead--;
+                           drawChar(6*charRead, 0, ' ', WHITE, BLACK, 0x01);
                            deleteFlag = 0;
                     }
                     if (muteFlag == 1 && _readTime > 2500) {
