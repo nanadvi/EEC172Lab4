@@ -79,8 +79,7 @@ typedef struct PinSetting {
     unsigned long port;
     unsigned int pin;
 } PinSetting;
-static PinSetting gpioin = { .port = GPIOA0_BASE, .pin = 0x40 };
-static PinSetting adc = { .port = GPIOA0_BASE, .pin = 0x40 };
+static PinSetting adc = { .port = GPIOA0_BASE, .pin = 0x1 };
 static PinSetting oled = { .port = GSPI_BASE, .pin = 0x00000007 };
 volatile int buffer[410]; // stores the number of samples
 int MAX_BUFFER_COUNT = 410; // max number of samples from ADC
@@ -209,7 +208,7 @@ void receiveMessage() {
 
     MAP_UtilsDelay(80000);
 
-    for (i=0; i<8; i++) {
+    for (i=0; i<64; i++) {
         receiverBuffer[i] = MAP_UARTCharGet(UARTA1_BASE);
         MAP_UtilsDelay(80000);
         Report("%c", receiverBuffer[i]);
@@ -278,46 +277,6 @@ void UARTInt_Init()
     MAP_UARTIntEnable(UARTA1_BASE, UART_INT_RX);
 
     UARTFIFOEnable(UARTA1_BASE);
-}
-
-void GetData()
-{
-    unsigned char b0, b1;
-    unsigned long c0, c1;
-    // Enable ADC chip select
-    MAP_SPICSEnable(GSPI_BASE);
-//    GPIOPinWrite(adc.pin, adc.port, 0x00);
-    // Put dummy data
-    MAP_SPIDataPut(GSPI_BASE, 0x0);
-    // Get the first byte
-    MAP_SPIDataGet(GSPI_BASE, &c0);
-    // Put dummy data
-    MAP_SPIDataPut(GSPI_BASE, 0x00);
-    // Get the second byteS
-    MAP_SPIDataGet(GSPI_BASE, &c1);
-
-    printf("Buffer Count: %d", bufferCount);
-
-    buffer[bufferCount] = (int)(((c0 & 0x1f) << 5) + ((c1 & 0xf8) >> 3)) - DC_BIAS;
-
-    if (bufferCount+1 >= 410) {
-        bufferCount = 0;
-        goertzelsFlag = 1;
-    }
-    else {
-        goertzelsFlag = 0;
-    }
-
-    b0 = (unsigned char) c0;
-    b1 = (unsigned char) c1;
-    printf("%u\n", b0);
-    printf("%u\n", b1);
-    sysTickFlag = 0;
-    MAP_SPICSDisable(GSPI_BASE);
-//    GPIOPinWrite(adc.pin, adc.port, 0xff);
-
-    // Enabling OLED CS
-//    GPIOPinWrite(oled.pin, oled.port, 0x0);
 }
 
 void DisplayBanner()
@@ -446,8 +405,13 @@ int main()
     // Initialize Timer
     timerInit();
 
-    //set the chip select to high
-    GPIOPinWrite(adc.pin, adc.port, 0xff);
+    //
+    // Enable the SPI module clock
+    //
+    MAP_PRCMPeripheralClkEnable(PRCM_GSPI,PRCM_RUN_MODE_CLK);
+
+    // set the chip select to high
+    // GPIOPinWrite(adc.pin, adc.port, 0xff);
 
     // Register the interrupt handlers
     // GpioIntInit();
@@ -486,8 +450,10 @@ int main()
             unsigned char b0, b1;
             unsigned long c0, c1;
             // Enable ADC chip select
+            // MAP_SPICSDisable(GSPI_BASE);
+            GPIOPinWrite(adc.port, adc.pin, 0x0);
             MAP_SPICSEnable(GSPI_BASE);
-//            GPIOPinWrite(adc.pin, adc.port, 0x0);
+
             // Put dummy data
             MAP_SPIDataPut(GSPI_BASE, 0x0);
             // Get the first byte
@@ -496,9 +462,9 @@ int main()
             MAP_SPIDataPut(GSPI_BASE, 0x00);
             // Get the second byteS
             MAP_SPIDataGet(GSPI_BASE, &c1);
-//            GPIOPinWrite(adc.pin, adc.port, 0x1);
-            MAP_SPICSDisable(GSPI_BASE);
-
+            // MAP_SPICSDisable(GSPI_BASE);
+            GPIOPinWrite(adc.port, adc.pin, adc.pin);
+            MAP_SPICSEnable(GSPI_BASE);
 //            printf("Buffer Count: %d", bufferCount);
 
             buffer[bufferCount] = (int)(((c0 & 0x1f) << 5) + ((c1 & 0xf8) >> 3)) - DC_BIAS;
@@ -642,6 +608,7 @@ int main()
                             readBuffer[charRead-1] = output;
                         }
                         Report("%c", readBuffer[charRead-1]);
+                        drawChar(6*charRead, 0, readBuffer[charRead-1], WHITE, BLACK, 0x01);
                         // drawChar
 
                     }
@@ -698,6 +665,7 @@ int main()
                             readBuffer[charRead] = output;
                         }
                         Report("%c", readBuffer[charRead]);
+                        drawChar(6*charRead, 0, readBuffer[charRead], WHITE, BLACK, 0x01);
                         if (deleteFlag == 0)
                             charRead++;
                     }
